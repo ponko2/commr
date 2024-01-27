@@ -1,6 +1,8 @@
+use crate::Column::*;
 use anyhow::{anyhow, bail, Result};
 use clap::Parser;
 use std::{
+    cmp::Ordering::*,
     fs::File,
     io::{self, BufRead, BufReader},
 };
@@ -37,6 +39,13 @@ pub struct Args {
 }
 
 #[derive(Debug)]
+enum Column<'a> {
+    Col1(&'a str),
+    Col2(&'a str),
+    Col3(&'a str),
+}
+
+#[derive(Debug)]
 pub struct Config {
     file1: String,
     file2: String,
@@ -68,9 +77,81 @@ pub fn run(config: Config) -> Result<()> {
         bail!("Both input files cannot be STDIN (\"-\")");
     }
 
-    let _file1 = open(file1)?;
-    let _file2 = open(file2)?;
-    println!("Opened {file1} and {file2}");
+    let case = |line: String| {
+        if config.insensitive {
+            line.to_lowercase()
+        } else {
+            line
+        }
+    };
+
+    let mut lines1 = open(file1)?.lines().map_while(Result::ok).map(case);
+    let mut lines2 = open(file2)?.lines().map_while(Result::ok).map(case);
+
+    let print = |col: Column| {
+        let mut columns = vec![];
+        match col {
+            Col1(value) => {
+                if config.show_col1 {
+                    columns.push(value);
+                }
+            }
+            Col2(value) => {
+                if config.show_col2 {
+                    if config.show_col1 {
+                        columns.push("");
+                    }
+                    columns.push(value);
+                }
+            }
+            Col3(value) => {
+                if config.show_col3 {
+                    if config.show_col1 {
+                        columns.push("");
+                    }
+                    if config.show_col2 {
+                        columns.push("");
+                    }
+                    columns.push(value);
+                }
+            }
+        }
+        if !columns.is_empty() {
+            println!("{}", columns.join(&config.delimiter));
+        }
+    };
+
+    let mut line1 = lines1.next();
+    let mut line2 = lines2.next();
+
+    while line1.is_some() || line2.is_some() {
+        match (&line1, &line2) {
+            (Some(value1), Some(value2)) => match value1.cmp(value2) {
+                Equal => {
+                    print(Col3(value1));
+                    line1 = lines1.next();
+                    line2 = lines2.next();
+                }
+                Less => {
+                    print(Col1(value1));
+                    line1 = lines1.next();
+                }
+                Greater => {
+                    print(Col2(value2));
+                    line2 = lines2.next();
+                }
+            },
+            (Some(value1), None) => {
+                print(Col1(value1));
+                line1 = lines1.next();
+            }
+            (None, Some(value2)) => {
+                print(Col2(value2));
+                line2 = lines2.next();
+            }
+            _ => (),
+        }
+    }
 
     Ok(())
 }
