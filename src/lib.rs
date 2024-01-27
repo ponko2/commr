@@ -1,5 +1,9 @@
-use anyhow::Result;
+use anyhow::{anyhow, bail, Result};
 use clap::Parser;
+use std::{
+    fs::File,
+    io::{self, BufRead, BufReader},
+};
 
 #[derive(Debug, Parser)]
 #[command(version, about, long_about = None)]
@@ -57,6 +61,25 @@ pub fn get_args() -> Result<Config> {
 }
 
 pub fn run(config: Config) -> Result<()> {
-    dbg!(config);
+    let file1 = &config.file1;
+    let file2 = &config.file2;
+
+    if file1 == "-" && file2 == "-" {
+        bail!("Both input files cannot be STDIN (\"-\")");
+    }
+
+    let _file1 = open(file1)?;
+    let _file2 = open(file2)?;
+    println!("Opened {file1} and {file2}");
+
     Ok(())
+}
+
+fn open(filename: &str) -> Result<Box<dyn BufRead>> {
+    Ok(match filename {
+        "-" => Box::new(BufReader::new(io::stdin())),
+        _ => Box::new(BufReader::new(
+            File::open(filename).map_err(|err| anyhow!("{filename}: {err}"))?,
+        )),
+    })
 }
